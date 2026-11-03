@@ -1,0 +1,4 @@
+#cloud-config
+# Paste into "Cloud-Init User-Data" when deploying a Vultr Ubuntu 24.04 instance. Edit DOMAIN and REPO.
+runcmd:
+  - [bash, -c, "git clone https://github.com/YOUR_USER/safecode-agent /opt/safecode/app && DOMAIN=safecode.example.com REPO=https://github.com/YOUR_USER/safecode-agent bash /opt/safecode/app/deploy/setup.sh > /var/log/safecode-setup.log 2>&1"]

@@ -1,0 +1,30 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SafeCode Agent — containment-first code execution</title><link rel="stylesheet" href="/style.css"></head><body>
+<header><div class="brand"><span class="logo">⛨</span><div><h1>SafeCode Agent</h1><p>Plain English → code → sandboxed run → verified output. Blast radius: zero.</p></div></div>
+<div class="pills"><span id="sbx" class="pill">sandbox…</span><span id="llm" class="pill">llm…</span></div></header>
+<main>
+<section class="col">
+  <div class="card"><h2>1 · Describe a task</h2>
+    <textarea id="task" rows="3" placeholder="e.g. Simulate 10,000 dice rolls and print a histogram"></textarea>
+    <div id="examples" class="chips"></div>
+    <h3>Try to escape <small>(containment demos)</small></h3><div id="demos" class="chips danger"></div>
+    <button id="gen" class="primary">Generate code</button></div>
+  <div class="card"><h2>2 · Review the code <small>nothing runs until you click Run</small></h2>
+    <div class="meta" id="genmeta">No code yet.</div>
+    <textarea id="code" class="code" rows="12" spellcheck="false" placeholder="Generated code appears here. You can edit it."></textarea>
+    <div id="policy"></div>
+    <button id="run" class="run" disabled>▶ Run in sandbox</button></div>
+</section>
+<section class="col">
+  <div class="card"><h2>3 · Sandboxed execution</h2>
+    <div id="badge" class="badge idle">Idle</div>
+    <div class="stats" id="stats"></div>
+    <pre id="out" class="term"></pre>
+    <div id="explain" class="explain"></div></div>
+  <div class="card"><h2>Containment status</h2><ul id="limits" class="limits"></ul></div>
+</section>
+<section class="col narrow">
+  <div class="card"><h2>Run history</h2><ul id="history" class="list"></ul></div>
+  <div class="card"><h2>Audit log</h2><ul id="audit" class="list mono"></ul></div>
+</section></main>
+<script src="/app.js" type="module"></script></body></html>

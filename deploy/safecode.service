@@ -1,0 +1,15 @@
+[Unit]
+Description=SafeCode Agent
+After=network-online.target docker.service
+Requires=docker.service
+[Service]
+User=safecode
+WorkingDirectory=/opt/safecode/app
+Environment=HOST=127.0.0.1 PORT=4321 NODE_ENV=production
+ExecStart=/usr/bin/node server/index.js
+Restart=always
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=false
+[Install]
+WantedBy=multi-user.target

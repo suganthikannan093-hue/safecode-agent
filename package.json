@@ -1,0 +1,15 @@
+{
+  "name": "safecode-agent",
+  "version": "0.1.0",
+  "description": "Containment-first AI code execution agent for Vultr (Agent Rush - Blast Radius Zero)",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "lint": "node scripts/lint.js",
+    "test": "node --test test/*.test.js",
+    "build": "node scripts/build.js"
+  }
+}

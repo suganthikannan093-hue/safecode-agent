@@ -1,6 +1,6 @@
 {
   "name": "safecode-agent",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Containment-first AI code execution agent for Vultr (Agent Rush - Blast Radius Zero)",
   "type": "module",
   "license": "MIT",

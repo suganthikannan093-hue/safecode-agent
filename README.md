@@ -7,6 +7,18 @@ You describe a task in plain English. The agent (an LLM on **Vultr Serverless In
 ![normal run](docs/02-normal-task.png)
 ![containment](docs/04-contained-fork.png)
 
+**New in v0.2:** 🩹 self-healing retries · 📄 CSV upload with sandbox-drawn charts · 🧾 proof-of-execution receipts · 📊 live safety dashboard.
+
+| Self-heal | CSV → chart | Proof receipt | Live dashboard |
+|---|---|---|---|
+| ![](docs/09-self-heal.png) | ![](docs/10-csv-chart.png) | ![](docs/11-proof-receipt.png) | ![](docs/12-safety-dashboard.png) |
+
+## Features
+- **Self-healing retries.** If a run fails on its own (non-zero exit, no containment limit fired), the model on Vultr Serverless Inference gets the code and stderr, returns a fix, and it re-runs in a **brand-new sandbox**. Max 3 attempts. The UI shows an attempt timeline (who wrote each version, exit code, sandbox ID, destroyed), and every attempt is a `run.attempt` line in the audit log. Runs stopped by a containment limit are **never** sent for healing, so the model is never asked to get past the sandbox. Toggle it with the "Self-heal on failure" checkbox; the "Buggy code (self-heal)" preset shows it on camera.
+- **CSV upload with charts.** Upload a CSV (max 1 MB, `.csv` only, no binary). It's mounted **read-only** at `/work/input/<name>`. The only writable persisted path is `/work/out`; PNG/SVG files there (max 2 MB, 4 files) are collected and shown, then the sandbox is destroyed. The agent prints a `RESULTS_JSON=` line, rendered as a "verified numbers" table taken from real stdout. No network, no secrets, same time/memory/pid caps.
+- **Proof receipts.** Every run has `GET /api/runs/<id>/receipt.json` and `.html` (add `?download`): prompt, model, code + SHA-256, input file hashes, stdout/stderr + output hash (`sha256(stdout + "\0" + stderr)`), chart hashes, resource limits, sandbox ID, lifecycle timestamps (created, started, finished, destroyed), containment events and the full self-heal timeline. Also stored in `data/receipts/`.
+- **Live safety dashboard.** Total runs, success, failed, contained, self-healed, average sandbox lifetime, contained attacks by type (pids, network, fs, timeout, memory) and recent events. Pushed live over Server-Sent Events (`/api/events`); a snapshot is at `/api/stats`.
+
 ## Architecture
 
 ```mermaid
@@ -20,9 +32,16 @@ flowchart LR
   EX -->|local demo, not production| B[bubblewrap namespaces<br/>+ prlimit + timeout]
   D -->|stdout/stderr stream, exit, limits| API
   API --> A[(Run history + audit log<br/>data/audit.jsonl)]
+  API -->|on failure: code + stderr| H[Self-heal loop<br/>server/agent.js, max 3]
+  H -->|fix| VSI
+  H -->|re-run, FRESH sandbox| EX
+  UP[CSV upload ≤1 MB] -->|read-only /work/input| EX
+  EX -->|/work/out PNG/SVG, then destroyed| API
+  API --> R[(Proof receipts<br/>JSON + HTML, SHA-256)]
+  API -->|SSE /api/events| DB[Live safety dashboard]
 ```
 
-**Flow:** plan (LLM writes code) → human review (code shown, editable, policy scan flags) → dispatch (fresh sandbox) → verify (real output and exit code, limits classified) → explain (LLM summarises the real result) → destroy (container and temp dir removed) → audit.
+**Flow:** plan (LLM writes code, optionally against an uploaded CSV) → human review (code shown, editable, policy scan flags) → dispatch (fresh sandbox) → verify (real output and exit code, limits classified) → self-heal if it failed on its own (LLM fixes from stderr, fresh sandbox, ≤3 attempts) → explain (LLM summarises the real result) → destroy (container and temp dir removed) → receipt + audit + live dashboard.
 
 **Containment guarantees**
 | Limit | Docker mode (Vultr VM) | Local demo mode (bwrap) |
@@ -52,7 +71,15 @@ npm start                   # http://127.0.0.1:4321
 ```
 With no key at all, a labelled offline mock is used. The escape demos always use fixed preset attack code, so containment is reproducible.
 
-`python scripts/e2e.py` (Playwright) drives the full UI flow plus all six escape demos and writes screenshots to `docs/`.
+`python scripts/e2e.py` (Playwright) drives the full UI flow plus all six escape demos and writes screenshots to `docs/`. `python scripts/e2e_features.py` drives self-heal, CSV chart, receipt and dashboard.
+
+## How Vultr is used
+| Vultr service | What it does here |
+|---|---|
+| **Serverless Inference** (`https://api.vultrinference.com/v1`, OpenAI-compatible) | Every agent LLM call: code generation (incl. CSV analysis), **self-heal fixes**, and the result explanation. Default provider whenever `VULTR_INFERENCE_API_KEY` is set; model via `VULTR_INFERENCE_MODEL`. The model name is written into every proof receipt. |
+| **Cloud Compute VM** | Runs the Node control layer, Caddy (HTTPS) and the Docker + gVisor sandbox executor. Every attempt (including each self-heal retry and each CSV analysis) is a separate throwaway container on this VM. |
+
+The provider is switchable in `server/llm.js`: Vultr (default when keyed) → OpenAI (local dev fallback only, labelled in the UI) → offline mock (no key; presets still demo self-heal and CSV charts).
 
 ## Deploy to a Vultr VM
 
@@ -76,7 +103,9 @@ Click any **Try to escape** button, review the attack code and the red policy-sc
 
 Then run a normal task to show that the app still works.
 
+Then show the new features: click **Buggy code (self-heal)** → Run (fails with `KeyError`, the model fixes it, attempt 2 passes in a new sandbox). Upload `docs/sample-sales.csv`, ask "Total revenue per region, and draw a bar chart" → chart + verified numbers. Open the **Proof receipt**, and watch the **Live safety dashboard** count each contained attack by type.
+
 ## Project layout
-`server/index.js` API and static server · `server/sandbox.js` executor · `server/llm.js` Vultr/OpenAI/mock · `server/policy.js` scan · `server/demos.js` escape presets · `public/` UI · `test/containment.test.js` · `deploy/` Vultr VM · `HACKATHON.md`.
+`server/index.js` API and static server · `server/sandbox.js` executor · `server/llm.js` Vultr/OpenAI/mock · `server/policy.js` scan · `server/agent.js` self-heal loop, receipts, stats · `server/demos.js` escape, self-heal and CSV presets · `public/` UI · `test/` (containment, features, HTTP) · `deploy/` Vultr VM · `HACKATHON.md`.
 
 MIT licensed.

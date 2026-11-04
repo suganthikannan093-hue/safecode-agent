@@ -1,7 +1,7 @@
 // LLM provider. Vultr Serverless Inference (required for Challenge 1) is the default when configured;
 // OpenAI is a dev fallback; an offline mock is clearly labelled when no key is present.
 // API keys live only in this server process and are never passed into the sandbox.
-import { DEMOS } from './demos.js';
+import { DEMOS, HEAL_DEMO, MOCK_CSV_CODE } from './demos.js';
 export function provider() {
   if (process.env.VULTR_INFERENCE_API_KEY) return { name: 'vultr', base: process.env.VULTR_INFERENCE_BASE_URL || 'https://api.vultrinference.com/v1', key: process.env.VULTR_INFERENCE_API_KEY, model: process.env.VULTR_INFERENCE_MODEL || 'qwen3.8-27b', label: 'Vultr Serverless Inference' };
   if (process.env.OPENAI_API_KEY) return { name: 'openai', base: 'https://api.openai.com/v1', key: process.env.OPENAI_API_KEY, model: process.env.OPENAI_MODEL || 'gpt-4o-mini', label: 'OpenAI (dev fallback, not Vultr)' };
@@ -23,15 +23,20 @@ function parse(txt) {
   if (!['python', 'bash'].includes(j.language) || typeof j.code !== 'string') throw new Error('Model returned invalid code JSON');
   return j;
 }
-export async function generate(task) {
+const FILE_SYS = f => `\nA CSV file is mounted READ-ONLY at /work/input/${f.name} (${f.bytes} bytes). Header and first rows:\n${f.preview}\n` +
+  'Analyse it with python csv module (stdlib only, no pandas/matplotlib). If a chart helps, write it as a hand-built SVG (with xmlns, a white background, axis labels and value labels) to /work/out/chart.svg ' +
+  '(the only writable output dir). Print the key numbers, and finally print one line exactly as: print("RESULTS_JSON=" + json.dumps(results)) where results is a dict of the key numbers.';
+export async function generate(task, { file } = {}) {
   const p = provider();
+  if (task === HEAL_DEMO.task) return { ...HEAL_DEMO, provider: { name: 'preset', model: 'heal-preset', label: 'Self-heal demo preset (buggy on purpose)' } };
   const demo = DEMOS.find(d => d.task === task);
   // Escape demos use fixed, reviewed attack code so the containment moment is reproducible on camera.
   if (demo) return { ...demo, provider: { name: 'preset', model: 'escape-preset', label: 'Containment demo preset' } };
   if (p.name === 'mock' || process.env.SAFECODE_FORCE_MOCK) {
+    if (file) return { language: 'python', code: MOCK_CSV_CODE(file.name), explanation: 'Offline mock CSV analysis (group-by sum + SVG chart).', provider: p };
     return { language: 'python', code: `# offline mock: no LLM key configured\nprint("Task received:", ${JSON.stringify(task)})\nprint(sum(range(1, 101)))`, explanation: 'Offline mock placeholder (configure VULTR_INFERENCE_API_KEY).', provider: p };
   }
-  const msgs = [{ role: 'system', content: SYS }, { role: 'user', content: task }];
+  const msgs = [{ role: 'system', content: SYS + (file ? FILE_SYS(file) : '') }, { role: 'user', content: task }];
   let out = await chat(p, msgs, true);
   try { return { ...parse(out), provider: p }; } catch (e) {
     // one repair attempt, then fail loudly (never run unparsed output)
@@ -46,4 +51,17 @@ export async function explain(task, code, result) {
     return await chat(p, [{ role: 'system', content: 'Explain in 2 sentences what this sandboxed run produced, and if any containment limit triggered, say which one absorbed the action. Plain text.' },
       { role: 'user', content: JSON.stringify({ task, code: code.slice(0, 2000), exitCode: result.exitCode, stdout: result.stdout.slice(0, 1500), stderr: result.stderr.slice(0, 1500), triggered: result.limits.filter(l => l.triggered).map(l => l.id) }) }]);
   } catch (e) { return `(explanation unavailable: ${e.message})`; }
+}
+
+// Self-heal: give the model the failing code + stderr, get a corrected program. Always re-run in a FRESH sandbox by the caller.
+export async function fix({ task, code, language, stdout, stderr, exitCode, file }) {
+  const p = provider();
+  if (p.name === 'mock' || process.env.SAFECODE_FORCE_MOCK) {
+    if (code === HEAL_DEMO.code) return { language: 'python', code: HEAL_DEMO.fixed, explanation: 'Offline mock fix: corrected the key typo and parsed values as numbers.', provider: p };
+    return null; // mock cannot invent fixes
+  }
+  const msgs = [{ role: 'system', content: SYS + (file ? FILE_SYS(file) : '') + '\nYou are fixing a program that FAILED in the sandbox. Return the full corrected program in the same JSON format; explanation = what you fixed. Do not try to bypass sandbox limits (no network, read-only fs).' },
+    { role: 'user', content: JSON.stringify({ task, language, code: code.slice(0, 4000), exitCode, stdout: stdout.slice(-1500), stderr: stderr.slice(-2500) }) }];
+  const out = await chat(p, msgs, true);
+  return { ...parse(out), provider: p };
 }

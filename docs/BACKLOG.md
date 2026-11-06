@@ -1,4 +1,4 @@
-# Pilot implementation backlog
+# Engineering backlog
 
 Historical planning baseline from 2026-11-05. Several items now have competition implementations: shared-operator authentication (not tenant ownership), required runsc, pinned production images, bounded tmpfs, budgets/cancellation, artifact checks, signed unique receipts, evidence labels and retention controls. See [current feature status](../FEATURES.md). Independent assessment, multitenancy, automated crash recovery and external alert routing remain outstanding. Acceptance criteria below are pilot gates, not a claim they all passed.
 
@@ -56,4 +56,3 @@ Demo: synthetic data, controlled access, honest claim boundaries. A successful s
 
 Private pilot with customer data: P0 complete, P1 evidence semantics corrected, independent assessment scoped to the intended use completed and critical findings remediated, buyer acceptance criteria/data flows agreed. If signing is deferred, describe receipts as unsigned and do not sell authenticated evidence.
 
-Shared SaaS: separate decision after paid demand, multitenant isolation validation, operational readiness and sustainable unit economics. The current implementation is not established as ready for this stage.

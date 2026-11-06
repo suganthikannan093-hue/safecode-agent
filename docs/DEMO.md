@@ -22,7 +22,7 @@ For a local Linux mock demonstration, omit `--competition` and set SAFECODE_FORC
 - 1:20–1:50: network preset and infinite loop. Show error-derived network inference versus controller-observed timeout. Rerun the normal task to demonstrate continued service operation.
 - 1:50–2:15: download receipt, run verifier, alter a copy and show rejection. Explain issuer integrity versus execution truth.
 - 2:15–2:40: cancel a running loop; pause execution; show the rejected new run and usage counters; resume.
-- 2:40–3:00: customer: AI product teams, dedicated four-week paid pilot proposal. State independent adversarial assessment and shared-tenant validation remain future gates. Link repository and actual deployed URL.
+- 2:40–3:00: who it helps: AI product teams running generated code over files. State independent adversarial assessment and shared-tenant validation remain future gates. Link repository and actual deployed URL.
 
 Do not promise that all program answers are correct or escapes impossible. Do not call these presets independent penetration testing. If a feature fails, fix it or report it accurately.
 

@@ -1,4 +1,4 @@
-# Remaining competition and pilot plan
+# Remaining competition plan
 
 Updated 2026-11-06. Implementation and feature documentation are complete for the v0.3 competition scope. This plan distinguishes local verification from live deployment evidence.
 
@@ -37,18 +37,7 @@ Owner: presenter/operator.
 
 Done when: the organizer confirms a complete submission. Publishing source alone does not complete this step.
 
-## 4. Validate the paid-pilot opportunity
-
-Owner: founder.
-
-- Interview 10–15 AI product teams already executing generated code over customer files.
-- Record the recent blocker, current alternative, budget owner and deployment deadline.
-- Test the proposed USD 4,500 four-week dedicated pilot; agree one workflow, acceptance criteria, data flows and recurring terms.
-- Seek two unrelated customers needing substantially the same integration. Revise the target/use case if qualified interviews produce no willingness to pay.
-
-Done when: paid commitments validate the offer. No customer interest, revenue or sales are currently claimed. Outreach requires a separate instruction; none has been sent.
-
-## 5. Complete real-customer release gates
+## 4. Complete real-customer release gates
 
 Owner: engineering, operator and independent assessor.
 

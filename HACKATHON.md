@@ -12,7 +12,6 @@ Official [event page](https://lablab.build/ai-hackathons/vultr-hackathon), check
 
 Every invocation gets a unique receipt with source/input/output hashes, configured policy, runtime image identity, lifecycle and attempt provenance. Ed25519 signatures can be checked with an independently trusted public key. The interface distinguishes controller-observed timeouts from classifications inferred from untrusted program output. This signature proves issuer attribution and record integrity, not output correctness or absence of sandbox escape. The prototype is not independently assessed for adversarial or multitenant use.
 
-**Business direction:** a dedicated paid pilot for one customer-file analysis workflow; proposed price USD 4,500 for four weeks, subject to validation and release gates. No sales or revenue are claimed.
 
 **Technology:** Vultr Cloud Compute, Vultr Serverless Inference (record actual configured model), Node.js, Docker, gVisor, Caddy, Python, Ed25519. Development mocks/fallbacks must be labelled and are not live Vultr evidence.
 
@@ -24,7 +23,7 @@ Every invocation gets a unique receipt with source/input/output hashes, configur
 2. Architecture and trust boundaries: controller, inference, sandbox and signing key.
 3. Working CSV, repair and containment demonstration.
 4. Receipt verification, operator budgets/cancellation and honest limitations.
-5. Dedicated pilot offer and independent assessment milestones.
+5. Independent assessment milestones.
 
 Use [the timed demo script](docs/DEMO.md). Feature-by-feature demonstrations are in [FEATURES.md](docs/FEATURES.md). Existing screenshots predate v0.3 and must not be used as evidence for new controls.
 

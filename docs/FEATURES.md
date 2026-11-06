@@ -76,4 +76,4 @@ Demo: run normal, preset and healed executions; watch counters, then inspect aud
 
 `examples/client.py` demonstrates upload → generation → explicit terminal approval → streamed result → receipt download using Python's standard library. It disables automatic healing so only the displayed code is approved. HTTP errors propagate; the example has a 90-second response timeout and explains the cancellation endpoint.
 
-Demo: set the endpoint and token-file environment variables, run `python3 examples/client.py`, inspect the code and type RUN. Verify the saved receipt. Use docs/pilot/offer.md for the proposed fixed-scope private pilot; pricing remains unvalidated and no customer commitments are implied.
+Demo: set the endpoint and token-file environment variables, run `python3 examples/client.py`, inspect the code and type RUN. Verify the saved receipt.

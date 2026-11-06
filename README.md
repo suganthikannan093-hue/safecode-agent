@@ -12,9 +12,9 @@ SafeCode is a competition prototype for Vultr Agent Rush, Challenge 1. Vultr Ser
 - [Threat model and receipt trust boundaries](docs/SECURITY.md)
 - [API and Python integration](docs/API.md)
 - [Current validation record](docs/VALIDATION.md)
-- [Remaining competition and pilot plan](docs/REMAINING-PLAN.md)
+- [Remaining competition plan](docs/REMAINING-PLAN.md)
 - [Submission kit](HACKATHON.md)
-- [Paid-pilot proposal](docs/pilot/README.md)
+- [Engineering backlog](docs/BACKLOG.md)
 
 ## What v0.3 adds
 

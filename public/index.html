@@ -1,22 +1,23 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SafeCode Agent — containment-first code execution</title><link rel="stylesheet" href="/style.css"></head><body>
-<header><div class="brand"><span class="logo">⛨</span><div><h1>SafeCode Agent</h1><p>Plain English → code → sandboxed run → verified output. Blast radius: zero.</p></div></div>
+<header><div class="brand"><span class="logo">⛨</span><div><h1>SafeCode Agent</h1><p>Customer CSV → reviewed code → restricted execution → signed evidence.</p></div></div>
 <div class="pills"><span id="sbx" class="pill">sandbox…</span><span id="llm" class="pill">llm…</span></div></header>
-<main>
+<section class="card" id="access"><h2>Workspace access</h2><form id="login"><label>Access token <input id="token" type="password" autocomplete="current-password" required></label><button>Unlock workspace</button></form><p id="access-message" role="status"></p><button id="logout" hidden>Sign out</button><a href="/demo.html">Feature demo guide</a></section>
+<main id="workspace" hidden>
 <section class="col">
   <div class="card"><h2>1 · Describe a task</h2>
     <textarea id="task" rows="3" placeholder="e.g. Simulate 10,000 dice rolls and print a histogram"></textarea>
     <div id="examples" class="chips"></div>
     <div class="upload"><label class="file">📄 Upload CSV <input id="csv" type="file" accept=".csv,text/csv"></label><span id="csvinfo" class="meta">optional · mounted read-only at /work/input · max 1 MB</span></div>
     <h3 class="heal">Self-heal <small>(buggy on purpose)</small></h3><div id="healdemo" class="chips heal"></div>
-    <h3>Try to escape <small>(containment demos)</small></h3><div id="demos" class="chips danger"></div>
+    <h3>Test the controls <small>(containment demos)</small></h3><div id="demos" class="chips danger"></div>
     <button id="gen" class="primary">Generate code</button></div>
-  <div class="card"><h2>2 · Review the code <small>nothing runs until you click Run</small></h2>
+  <div class="card"><h2>2 · Review the code <small>review the initial code; enabled retries run automatically</small></h2>
     <div class="meta" id="genmeta">No code yet.</div>
     <textarea id="code" class="code" rows="12" spellcheck="false" placeholder="Generated code appears here. You can edit it."></textarea>
     <div id="policy"></div>
     <label class="toggle"><input id="heal" type="checkbox" checked> Self-heal on failure (model fixes the code from stderr, re-runs in a fresh sandbox, max 3 attempts)</label>
-    <button id="run" class="run" disabled>▶ Run in sandbox</button></div>
+    <button id="run" class="run" disabled>▶ Run in sandbox</button> <button id="cancel" disabled>Cancel active run</button></div>
 </section>
 <section class="col">
   <div class="card"><h2>3 · Sandboxed execution</h2>
@@ -27,11 +28,12 @@
     <div id="explain" class="explain"></div>
     <div id="artifacts" class="artifacts"></div>
     <div id="receipt" class="receipt"></div></div>
-  <div class="card"><h2>Containment status</h2><ul id="limits" class="limits"></ul></div>
+  <div class="card"><h2>Controls and observations</h2><p class="meta">Timeout is observed by the controller. Other categories are inferred from program output and can be spoofed; they do not prove enforcement.</p><ul id="limits" class="limits"></ul></div>
 </section>
 <section class="col narrow">
+  <div class="card"><h2>Execution controls</h2><pre id="budgets"></pre><p id="privacy" class="meta"></p><button id="pause">Pause and cancel all runs</button> <button id="resume">Resume execution</button><button id="key">Download receipt public key</button><details><summary>Stored data</summary><p>Deletes uploads, drafts, receipts, history and audit entries. Budget counters and signing keys remain.</p><label><input id="delete-confirm" type="checkbox"> I want to delete this workspace’s stored data</label><button id="delete-data">Delete stored data</button></details><p id="control-message" role="status"></p></div>
   <div class="card" id="dash"><h2>Live safety dashboard <small id="live">● live</small></h2>
-    <div class="dgrid" id="dgrid"></div><h3 class="sub">Contained attacks by type</h3><div id="attacks" class="bars"></div>
+    <div class="dgrid" id="dgrid"></div><h3 class="sub">Containment signals by type</h3><div id="attacks" class="bars"></div>
     <h3 class="sub">Recent events</h3><ul id="recent" class="list mono"></ul></div>
   <div class="card"><h2>Run history</h2><ul id="history" class="list"></ul></div>
   <div class="card"><h2>Audit log</h2><ul id="audit" class="list mono"></ul></div>

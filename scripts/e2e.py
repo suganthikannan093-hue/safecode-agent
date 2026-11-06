@@ -1,5 +1,6 @@
 # End-to-end check + screenshots: python scripts/e2e.py (needs playwright + chrome)
-import sys
+import sys, os
+from pathlib import Path
 from playwright.sync_api import sync_playwright
 U = sys.argv[1] if len(sys.argv) > 1 else 'http://127.0.0.1:4321'
 def flow(pg, task=None, demo=None, shot=None):
@@ -13,11 +14,15 @@ def flow(pg, task=None, demo=None, shot=None):
     if shot: pg.screenshot(path=f'docs/{shot}.png', full_page=True)
     return b
 with sync_playwright() as p:
-    br = p.chromium.launch(executable_path='/usr/bin/google-chrome', headless=True)
+    br = p.chromium.launch(headless=True)
     pg = br.new_page(viewport={'width': 1600, 'height': 1000})
-    pg.goto(U); pg.wait_for_timeout(800); pg.screenshot(path='docs/01-home.png', full_page=True)
+    pg.goto(U); pg.wait_for_timeout(800)
+    if pg.locator('#login').is_visible():
+        pg.fill('#token', Path(os.environ['SAFECODE_ACCESS_TOKEN_FILE']).read_text().strip()); pg.click('#login button')
+    pg.wait_for_selector('#workspace:visible')
+    pg.wait_for_timeout(800); pg.screenshot(path='docs/01-home.png', full_page=True)
     assert 'Completed' in flow(pg, task='Simulate 10,000 dice rolls with a fixed seed and print a text histogram', shot='02-normal-task')
     for i, d in enumerate(['rm -rf /', 'Fork bomb', 'while True', 'curl exfil', 'read /etc/shadow', 'Memory bomb']):
-        assert 'CONTAINED' in flow(pg, demo=d, shot=f'{i+3:02d}-contained-{d.split()[0].strip("/").lower() or "rm"}')
+        assert 'Containment signals' in flow(pg, demo=d, shot=f'{i+3:02d}-contained-{d.split()[0].strip("/").lower() or "rm"}')
     br.close()
 print('E2E OK')

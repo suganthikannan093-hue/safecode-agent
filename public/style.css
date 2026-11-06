@@ -31,3 +31,5 @@ h3.heal{color:var(--warn)}.chips.heal button{border-color:#5a4a20;color:#ffd27a}
 h3.sub{color:var(--mut);margin-top:12px}.bars div{display:flex;align-items:center;gap:6px;font-size:12px;margin:3px 0}.bars i{display:inline-block;height:9px;background:var(--bad);border-radius:3px;min-width:2px}.bars span{width:62px;color:var(--mut)}
 #live{color:var(--ok)}#live.off{color:var(--mut)}
 @media(max-width:1100px){main{grid-template-columns:1fr}}
+
+[hidden]{display:none!important} #access{margin:20px} #access a{margin-left:16px} #token{font:inherit;padding:8px;max-width:100%} #budgets{white-space:pre-wrap} #control-message{min-height:1.5em}

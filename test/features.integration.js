@@ -57,3 +57,12 @@ test('stats bucket attacks by type and count outcomes', async () => {
   const x = s.snapshot(); assert.equal(x.runs, 5); assert.equal(x.success, 1); assert.equal(x.failed, 1); assert.equal(x.contained, 3);
   assert.deepEqual(x.attacks, { pids: 1, network: 0, fs: 1, timeout: 1, memory: 0 }); assert.equal(x.avgSandboxLifetimeMs, 100);
 });
+test('cancellation stops execution and is recorded without healing', async () => {
+  const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 500);
+  try { const r = await execute({ code: 'while True: pass', signal: ac.signal }); assert.equal(r.cancelled, true); assert.ok(r.lifecycle.destroyed); assert.equal(healable(r), false); }
+  finally { clearTimeout(timer); }
+});
+test('sandbox-created artifact symlink is never read by host collector', async () => {
+  const r = await execute({ code: 'import os\nos.symlink("/etc/passwd", "/work/out/leak.svg")\nprint("done")' });
+  assert.equal(r.exitCode, 0, r.stderr); assert.equal(r.artifacts.length, 0);
+});

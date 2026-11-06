@@ -5,6 +5,8 @@ if (existsSync(envFile)) for (const line of readFileSync(envFile, 'utf8').split(
   const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
   if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
 }
+const secretFile = process.env.VULTR_INFERENCE_API_KEY_FILE;
+if (secretFile && !process.env.VULTR_INFERENCE_API_KEY) process.env.VULTR_INFERENCE_API_KEY = readFileSync(secretFile, 'utf8').trim();
 export function integer(name, fallback, min = 1, max = 1e9) {
   const n = Number(process.env[name] ?? fallback);
   if (!Number.isSafeInteger(n) || n < min || n > max) throw new Error(`Invalid ${name}`);

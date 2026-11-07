@@ -74,55 +74,30 @@ export function noteCgroupEvents(pidsEvents, memoryEvents, observed) {
   if (/^(?:oom_group_kill|oom_kill|oom)\s+[1-9]/m.test(String(memoryEvents ?? ''))) observed.oomKilled = true;
 }
 
-function rememberCgroup(cache, id, pidRaw) {
-  const candidates = [];
-  if (cache.base) candidates.push(cache.base);
-  const pid = Number(pidRaw);
-  if (pid > 0) {
+// The scope disappears when the container exits, before `docker rm`. Latch hits while it exists,
+// then attribute them with the container id, which remains queryable until removal.
+function scanDockerScopes(pidHits, oomHits) {
+  let entries = [];
+  try { entries = readdirSync('/sys/fs/cgroup/system.slice'); } catch { return; }
+  for (const entry of entries) {
+    const id = (entry.match(/^docker-([a-f0-9]{64})\.scope$/) || [])[1];
+    if (!id) continue;
+    const base = `/sys/fs/cgroup/system.slice/${entry}`;
     try {
-      const rel = (readFileSync(`/proc/${pid}/cgroup`, 'utf8').match(/^\d+::(\/.+)$/m) || [])[1];
-      if (rel) candidates.push(`/sys/fs/cgroup${rel}`);
-    } catch { /* process already exited */ }
-  }
-  if (/^[a-f0-9]{64}$/.test(id || '')) candidates.push(`/sys/fs/cgroup/system.slice/docker-${id}.scope`);
-  for (const base of candidates) {
-    try { readFileSync(`${base}/pids.events`, 'utf8'); cache.base = base; return; } catch { /* try the next mount */ }
+      const snap = { oomKilled: false, pidLimitHit: false };
+      noteCgroupEvents(readFileSync(`${base}/pids.events`, 'utf8'), readFileSync(`${base}/memory.events`, 'utf8'), snap);
+      if (snap.pidLimitHit) pidHits.add(id);
+      if (snap.oomKilled) oomHits.add(id);
+    } catch { /* scope reaped between listing and read */ }
   }
 }
 
-function readCgroup(cache, observed) {
-  if (!cache.base) return;
-  try {
-    noteCgroupEvents(readFileSync(`${cache.base}/pids.events`, 'utf8'), readFileSync(`${cache.base}/memory.events`, 'utf8'), observed);
-  } catch { /* reaped before the final read; a latched hit still counts */ }
-}
-
-// Sample while the container exists. finish() reads once more before `docker rm`.
 function startEnforcementWatch(name) {
   const observed = { oomKilled: false, pidLimitHit: false };
-  const cache = { base: '' };
+  const pidHits = new Set();
+  const oomHits = new Set();
   let stopped = false;
-  let pending = false;
-  const tick = () => {
-    if (stopped || pending) return;
-    if (cache.base) { readCgroup(cache, observed); return; }
-    pending = true;
-    const child = spawn('docker', ['inspect', '--format', '{{.Id}} {{.State.Pid}} {{.State.OOMKilled}}', name], { stdio: ['ignore', 'pipe', 'ignore'] });
-    let out = '';
-    const killer = setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* already exited */ } }, 2000);
-    child.stdout.on('data', d => { out += d; });
-    child.on('error', () => { pending = false; });
-    child.on('close', () => {
-      clearTimeout(killer);
-      pending = false;
-      if (stopped) return;
-      const [id, pidRaw, oom] = out.trim().split(/\s+/);
-      if (oom === 'true') observed.oomKilled = true;
-      rememberCgroup(cache, id, pidRaw);
-      readCgroup(cache, observed);
-    });
-  };
-  const poll = setInterval(tick, 100);
+  const poll = setInterval(() => { if (!stopped) scanDockerScopes(pidHits, oomHits); }, 20);
   poll.unref();
   let finished = false;
   return { observed, finish() {
@@ -130,13 +105,12 @@ function startEnforcementWatch(name) {
     finished = true;
     stopped = true; clearInterval(poll);
     try {
-      const inspected = spawnSync('docker', ['inspect', '--format', '{{.Id}} {{.State.Pid}} {{.State.OOMKilled}}', name], { timeout: 3000, encoding: 'utf8' });
-      if (inspected.status === 0) {
-        const [id, pidRaw, oom] = inspected.stdout.trim().split(/\s+/);
-        if (oom === 'true') observed.oomKilled = true;
-        rememberCgroup(cache, id, pidRaw);
-      }
-      readCgroup(cache, observed);
+      scanDockerScopes(pidHits, oomHits);
+      const inspected = spawnSync('docker', ['inspect', '--format', '{{.Id}} {{.State.OOMKilled}}', name], { timeout: 3000, encoding: 'utf8' });
+      if (inspected.status !== 0) return;
+      const [id, oom] = inspected.stdout.trim().split(/\s+/);
+      if (oom === 'true' || oomHits.has(id)) observed.oomKilled = true;
+      if (pidHits.has(id)) observed.pidLimitHit = true;
     } catch { /* telemetry is best-effort; output classification still runs */ }
   } };
 }

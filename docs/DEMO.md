@@ -19,7 +19,7 @@ For a local Linux mock demonstration, omit `--competition` and set SAFECODE_FORC
 - 0:00–0:20: problem: AI teams want to ship customer-file analysis with controlled execution and reviewable evidence. Show actual runtime/provider/signing/access state; keep credentials off camera.
 - 0:20–0:55: upload `docs/demo-sales.csv`, inspect generated code, run it, compare north=320/south=80/east=50 to the fixture. Show sandbox chart and reported results.
 - 0:55–1:20: self-heal preset; show initial failure, model repair, new sandbox ID and per-attempt source/model record. State that enabling retries approves those subsequent automatic executions.
-- 1:20–1:50: network preset and infinite loop. Show error-derived network inference versus controller-observed timeout. Rerun the normal task to demonstrate continued service operation.
+- 1:20–1:50: network preset and infinite loop. The network preset connects to a numeric address because a hostname lookup can sit until the wall-clock timeout. Show that network denial is inferred from the error text, and that the loop's timeout is controller-observed. Rerun the normal task to demonstrate continued service operation.
 - 1:50–2:15: download receipt, run verifier, alter a copy and show rejection. Explain issuer integrity versus execution truth.
 - 2:15–2:40: cancel a running loop; pause execution; show the rejected new run and usage counters; resume.
 - 2:40–3:00: who it helps: AI product teams running generated code over files. State independent adversarial assessment and shared-tenant validation remain future gates. Link repository and actual deployed URL.

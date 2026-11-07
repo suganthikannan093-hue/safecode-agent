@@ -7,8 +7,8 @@ const sha = d => createHash('sha256').update(d).digest('hex');
 const CSV = 'region,revenue\nnorth,120\nsouth,80\nnorth,200\neast,50\n';
 
 test('CSV is mounted read-only and chart artifacts are collected, then destroyed', async () => {
-  const r = await execute({ code: MOCK_CSV_CODE('sales.csv') + '\ntry:\n    open("/work/input/sales.csv","w")\nexcept OSError as e: print("ro:", e.errno)', inputs: [{ name: 'sales.csv', data: Buffer.from(CSV) }] });
-  assert.equal(r.exitCode, 0, r.stderr); assert.match(r.stdout, /ro: 30/);
+  const r = await execute({ code: MOCK_CSV_CODE('sales.csv') + '\nimport os\nprint("ro_mount:", int(bool(os.statvfs("/work/input").f_flag & os.ST_RDONLY)))\ntry:\n    open("/work/input/sales.csv","w")\nexcept OSError as e: print("ro_errno:", e.errno)', inputs: [{ name: 'sales.csv', data: Buffer.from(CSV) }] });
+  assert.equal(r.exitCode, 0, r.stderr); assert.match(r.stdout, /ro_mount: 1/); assert.match(r.stdout, /ro_errno: (?:13|30)/);
   assert.deepEqual(verifiedNumbers(r.stdout).totals, { north: 320, south: 80, east: 50 });
   assert.equal(r.artifacts.length, 1); assert.equal(r.artifacts[0].mime, 'image/svg+xml'); assert.match(r.artifacts[0].dataUrl, /^data:image\/svg\+xml;base64,/);
   assert.ok(r.lifecycle.created <= r.lifecycle.started && r.lifecycle.finished <= r.lifecycle.destroyed); assert.match(r.sandboxId, /^safecode-/);

@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { signer, verifyReceipt } from '../server/receipts.js';
 import { governor, access } from '../server/controls.js';
-import { collectArtifacts, classify } from '../server/sandbox.js';
+import { collectArtifacts, classify, noteCgroupEvents } from '../server/sandbox.js';
+import { DEMOS } from '../server/demos.js';
 import { runWithHealing, buildReceipt, sha256 } from '../server/agent.js';
 const temporary = fn => { const dir = mkdtempSync(join(tmpdir(), 'safecode-test-')); try { return fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); } };
 test('signed receipt survives key ordering, rejects modification, wrong key and unsigned records', () => temporary(dir => {
@@ -28,6 +29,31 @@ test('printed error strings are explicitly untrusted inferences; timeout is obse
   const limits = classify({ stdout: 'MemoryError\nRead-only file system', stderr: '', exitCode: 0, timedOut: false, mode: { mode: 'docker' } });
   assert.equal(limits.find(l => l.id === 'memory').evidence, 'untrusted-output-inference');
   assert.equal(limits.find(l => l.id === 'timeout').triggered, false);
+});
+test('cgroup pid hits and runtime OOM kills are controller-observed', () => {
+  const observed = { oomKilled: false, pidLimitHit: false };
+  noteCgroupEvents('max 0\n', 'low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n', observed);
+  assert.equal(observed.pidLimitHit, false); assert.equal(observed.oomKilled, false);
+  noteCgroupEvents('max 1\n', 'oom 0\noom_kill 0\n', observed);
+  assert.equal(observed.pidLimitHit, true); assert.equal(observed.oomKilled, false);
+  noteCgroupEvents('max 1\n', 'oom_kill 1\n', observed);
+  assert.equal(observed.oomKilled, true);
+  const pid = classify({ stdout: '', stderr: '', exitCode: 2, timedOut: false, mode: { mode: 'docker' }, observed: { pidLimitHit: true } });
+  assert.equal(pid.find(l => l.id === 'pids').triggered, true);
+  assert.equal(pid.find(l => l.id === 'pids').evidence, 'controller-observed');
+  const oom = classify({ stdout: '', stderr: '', exitCode: 137, timedOut: false, mode: { mode: 'docker' }, observed: { oomKilled: true } });
+  assert.equal(oom.find(l => l.id === 'memory').evidence, 'controller-observed');
+  const printed = classify({ stdout: 'MemoryError', stderr: '', exitCode: 0, timedOut: false, mode: { mode: 'docker' }, observed: {} });
+  assert.equal(printed.find(l => l.id === 'memory').evidence, 'untrusted-output-inference');
+});
+test('containment presets match the runtime that actually denied them', () => {
+  const code = id => DEMOS.find(d => d.id === id).code;
+  assert.doesNotMatch(code('rmrf'), /no-preserve-root/);
+  assert.match(code('rmrf'), /rm -rf \//); assert.match(code('rmrf'), /touch \/var\/tmp\/safecode-root-probe/); assert.match(code('rmrf'), /still alive/);
+  assert.match(code('exfil'), /93\.184\.216\.34/); assert.doesNotMatch(code('exfil'), /example\.com/);
+  assert.match(code('mem'), /MemoryError/); assert.match(code('mem'), /flush=True/);
+  const network = classify({ stdout: 'OSError [Errno 101] Network unreachable', stderr: '', exitCode: 1, timedOut: false, mode: { mode: 'docker' } });
+  assert.equal(network.find(l => l.id === 'network').triggered, true);
 });
 test('budgets count every attempt, survive restart, cancel active work and persist pause', () => temporary(dir => {
   const path = join(dir, 'budget'); process.env.SAFECODE_DAILY_ATTEMPTS = '2'; process.env.SAFECODE_CONCURRENCY = '1';

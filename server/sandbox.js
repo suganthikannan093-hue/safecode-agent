@@ -68,21 +68,98 @@ function countUserProcs() {
   return (r.stdout?.toString().trim().split('\n').length || 0) + 8;
 }
 
-export function classify({ stdout, stderr, exitCode, signal, timedOut, mode }) {
+// pids.events "max" and memory.events oom counters are host telemetry, not program text.
+export function noteCgroupEvents(pidsEvents, memoryEvents, observed) {
+  if (Number((String(pidsEvents ?? '').match(/^max\s+(\d+)/m) || [])[1] || 0) > 0) observed.pidLimitHit = true;
+  if (/^(?:oom_group_kill|oom_kill|oom)\s+[1-9]/m.test(String(memoryEvents ?? ''))) observed.oomKilled = true;
+}
+
+function rememberCgroup(cache, id, pidRaw) {
+  const candidates = [];
+  if (cache.base) candidates.push(cache.base);
+  const pid = Number(pidRaw);
+  if (pid > 0) {
+    try {
+      const rel = (readFileSync(`/proc/${pid}/cgroup`, 'utf8').match(/^\d+::(\/.+)$/m) || [])[1];
+      if (rel) candidates.push(`/sys/fs/cgroup${rel}`);
+    } catch { /* process already exited */ }
+  }
+  if (/^[a-f0-9]{64}$/.test(id || '')) candidates.push(`/sys/fs/cgroup/system.slice/docker-${id}.scope`);
+  for (const base of candidates) {
+    try { readFileSync(`${base}/pids.events`, 'utf8'); cache.base = base; return; } catch { /* try the next mount */ }
+  }
+}
+
+function readCgroup(cache, observed) {
+  if (!cache.base) return;
+  try {
+    noteCgroupEvents(readFileSync(`${cache.base}/pids.events`, 'utf8'), readFileSync(`${cache.base}/memory.events`, 'utf8'), observed);
+  } catch { /* reaped before the final read; a latched hit still counts */ }
+}
+
+// Sample while the container exists. finish() reads once more before `docker rm`.
+function startEnforcementWatch(name) {
+  const observed = { oomKilled: false, pidLimitHit: false };
+  const cache = { base: '' };
+  let stopped = false;
+  let pending = false;
+  const tick = () => {
+    if (stopped || pending) return;
+    if (cache.base) { readCgroup(cache, observed); return; }
+    pending = true;
+    const child = spawn('docker', ['inspect', '--format', '{{.Id}} {{.State.Pid}} {{.State.OOMKilled}}', name], { stdio: ['ignore', 'pipe', 'ignore'] });
+    let out = '';
+    const killer = setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* already exited */ } }, 2000);
+    child.stdout.on('data', d => { out += d; });
+    child.on('error', () => { pending = false; });
+    child.on('close', () => {
+      clearTimeout(killer);
+      pending = false;
+      if (stopped) return;
+      const [id, pidRaw, oom] = out.trim().split(/\s+/);
+      if (oom === 'true') observed.oomKilled = true;
+      rememberCgroup(cache, id, pidRaw);
+      readCgroup(cache, observed);
+    });
+  };
+  const poll = setInterval(tick, 100);
+  poll.unref();
+  let finished = false;
+  return { observed, finish() {
+    if (finished) return;
+    finished = true;
+    stopped = true; clearInterval(poll);
+    try {
+      const inspected = spawnSync('docker', ['inspect', '--format', '{{.Id}} {{.State.Pid}} {{.State.OOMKilled}}', name], { timeout: 3000, encoding: 'utf8' });
+      if (inspected.status === 0) {
+        const [id, pidRaw, oom] = inspected.stdout.trim().split(/\s+/);
+        if (oom === 'true') observed.oomKilled = true;
+        rememberCgroup(cache, id, pidRaw);
+      }
+      readCgroup(cache, observed);
+    } catch { /* telemetry is best-effort; output classification still runs */ }
+  } };
+}
+
+export function classify({ stdout, stderr, exitCode, signal, timedOut, mode, observed = {} }) {
   const out = `${stdout}\n${stderr}`;
-  const t = (id, label, triggered, active = true) => ({ id, label, active, triggered, evidence: id === 'timeout' ? 'controller-observed' : 'untrusted-output-inference' });
+  const mark = (id, label, fromOutput, fromObservation, active = true) => {
+    const triggered = Boolean(fromOutput || fromObservation);
+    const evidence = id === 'timeout' || (fromObservation && triggered) ? 'controller-observed' : 'untrusted-output-inference';
+    return { id, label, active, triggered, evidence };
+  };
   const dockerOrBwrap = mode.mode !== 'none';
   return [
-    t('timeout', `Wall-clock timeout (${LIMITS.timeoutMs} ms)`, timedOut),
-    t('memory', `Memory cap (${LIMITS.memoryMb} MB)`, /MemoryError|Cannot allocate memory|out of memory/i.test(out) || exitCode === 137 && !timedOut),
-    t('pids', `Process limit (${LIMITS.pids} pids)`, /Resource temporarily unavailable|BlockingIOError|fork: retry|Errno 11/.test(out)),
-    t('network', 'No network (isolated namespace)', /Network is unreachable|Temporary failure in name resolution|Name or service not known|Could not resolve|Errno -[23]|Errno 101|Errno 99/i.test(out)),
-    t('readonly-fs', 'Read-only root filesystem', /Read-only file system|Errno 30/.test(out)),
-    t('secrets', 'Host secrets & env not mounted', /\/etc\/(shadow|passwd)|No such file or directory: '\/(etc|root|home)/.test(out) || /Permission denied/.test(out)),
-    t('caps', 'All Linux capabilities dropped', /Operation not permitted|Errno 1\b/.test(out)),
-    t('non-root', 'Runs as uid 65534 (nobody)', /Permission denied|Errno 13/.test(out)),
-    t('seccomp', mode.mode === 'docker' ? 'Seccomp syscall filter' : 'Seccomp (Docker mode only)', false, mode.mode === 'docker'),
-    t('ephemeral', 'Fresh environment, destroyed after run', false, dockerOrBwrap),
+    mark('timeout', `Wall-clock timeout (${LIMITS.timeoutMs} ms)`, false, timedOut),
+    mark('memory', `Memory cap (${LIMITS.memoryMb} MB)`, /MemoryError|Cannot allocate memory|out of memory/i.test(out) || exitCode === 137 && !timedOut, observed.oomKilled),
+    mark('pids', `Process limit (${LIMITS.pids} pids)`, /Resource temporarily unavailable|BlockingIOError|fork: retry|Errno 11/.test(out), observed.pidLimitHit),
+    mark('network', 'No network (isolated namespace)', /Network is unreachable|Temporary failure in name resolution|Name or service not known|Could not resolve|Errno -[23]|Errno 101|Errno 99/i.test(out), false),
+    mark('readonly-fs', 'Read-only root filesystem', /Read-only file system|Errno 30/.test(out), false),
+    mark('secrets', 'Host secrets & env not mounted', /\/etc\/(shadow|passwd)|No such file or directory: '\/(etc|root|home)/.test(out) || /Permission denied/.test(out), false),
+    mark('caps', 'All Linux capabilities dropped', /Operation not permitted|Errno 1\b/.test(out), false),
+    mark('non-root', 'Runs as uid 65534 (nobody)', /Permission denied|Errno 13/.test(out), false),
+    mark('seccomp', mode.mode === 'docker' ? 'Seccomp syscall filter' : 'Seccomp (Docker mode only)', false, false, mode.mode === 'docker'),
+    mark('ephemeral', 'Fresh environment, destroyed after run', false, false, dockerOrBwrap),
   ];
 }
 
@@ -102,6 +179,7 @@ export async function execute({ code, language = 'python', inputs = [], onChunk 
   }
   const lifecycle = { created: new Date().toISOString() };
   const root = mkdtempSync(join(workDir, 'safecode-'));
+  let watch = { observed: {}, finish() {} };
   try {
   const dir = join(root, 'code'), out = join(root, 'out'); mkdirSync(dir); mkdirSync(out); mkdirSync(join(dir, 'input')); mkdirSync(join(dir, 'out')); // mountpoints
   writeFileSync(join(dir, FILES[language]), code); chmodSync(join(dir, FILES[language]), 0o444); chmodSync(dir, 0o755); chmodSync(out, 0o777); chmodSync(root, 0o755);
@@ -115,6 +193,7 @@ export async function execute({ code, language = 'python', inputs = [], onChunk 
     chmodSync(input, 0o555);
   }
   const name = `safecode-${randomUUID()}`;
+  watch = mode.mode === 'docker' ? startEnforcementWatch(name) : watch;
   let imageIdentity = null;
   if (mode.mode === 'docker') {
     const inspected = spawnSync('docker', ['image', 'inspect', '--format', '{{.Id}}', IMAGES[language]], { timeout: 5000 });
@@ -131,7 +210,6 @@ export async function execute({ code, language = 'python', inputs = [], onChunk 
   let cancelled = false;
   const stop = () => {
     try { if (child.pid) process.kill(-child.pid, 'SIGKILL'); } catch { /* already exited */ }
-    if (mode.mode === 'docker') spawnSync('docker', ['rm', '-f', name], { timeout: 5000 });
   };
   const abort = () => { cancelled = true; stop(); };
   signal?.addEventListener('abort', abort, { once: true });
@@ -146,6 +224,7 @@ export async function execute({ code, language = 'python', inputs = [], onChunk 
   } finally {
     clearTimeout(timer); signal?.removeEventListener('abort', abort);
     if (mode.mode === 'docker') {
+      watch.finish();
       spawnSync('docker', ['rm', '-f', name], { timeout: 5000 });
       const remaining = spawnSync('docker', ['ps', '-aq', '--filter', `name=^/${name}$`], { timeout: 5000 });
       if (remaining.status !== 0 || remaining.stdout.toString().trim()) throw new Error(`Cleanup unconfirmed for ${name}; operator action required`);
@@ -157,11 +236,11 @@ export async function execute({ code, language = 'python', inputs = [], onChunk 
   if (input) chmodSync(input, 0o755);
   rmSync(root, { recursive: true, force: true }); lifecycle.destroyed = new Date().toISOString();
   const durationMs = Date.now() - started;
-  const limits = classify({ stdout, stderr, exitCode, signal: exitSignal, timedOut, mode });
+  const limits = classify({ stdout, stderr, exitCode, signal: exitSignal, timedOut, mode, observed: watch.observed });
   const contained = limits.some(l => l.triggered);
   return { sandboxId: name, lifecycle, mode, exitCode: exitCode ?? (exitSignal ? 137 : -1), signal: exitSignal, cancelled, imageIdentity, durationMs, stdout, stderr, truncated, timedOut, limits, contained, artifacts,
     resources: { timeoutMs: LIMITS.timeoutMs, memoryMb: LIMITS.memoryMb, pids: LIMITS.pids, cpus: LIMITS.cpus, maxOutputBytes: LIMITS.maxOutput, maxInputBytes: LIMITS.maxInputBytes, network: 'none', rootfs: 'read-only', outputBytes: Buffer.byteLength(stdout) + Buffer.byteLength(stderr) } };
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally { watch.finish(); rmSync(root, { recursive: true, force: true }); }
 }
 
 // Open without following symlinks; inspect the opened descriptor, cap reads, reject special files.

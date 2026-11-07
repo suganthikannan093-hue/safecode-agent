@@ -24,7 +24,7 @@ Demo: use every built-in preset (read-only write, fork/process exhaustion, infin
 
 ## 4. Evidence categories and spoof resistance in presentation
 
-Timeout is labelled `controller-observed`; other currently classified categories are `untrusted-output-inference`. A matching stderr string may come from a real denial or a program deliberately printing it. Configured controls are recorded separately.
+Timeout, a cgroup pid-limit hit and a runtime OOM kill are labelled `controller-observed` when the runtime reports them. Other categories are `untrusted-output-inference`. A matching stderr string may come from a real denial or a program deliberately printing it. Configured controls are recorded separately.
 
 Demo: edit Python to `print("MemoryError")`. Exit is zero; the memory category is explicitly an inference, not verified memory enforcement. Automated: spoofed-error scenario and portable regression. Conservative retry suppression still applies when any signal is present.
 

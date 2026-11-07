@@ -19,6 +19,14 @@ test('network exfiltration fails, and no secrets in sandbox env', async () => {
   process.env.FAKE_SECRET_KEY = 'sk-should-not-leak';
   const r = await execute({ ...demo('exfil') }); assert.ok(trig(r).includes('network'), r.stderr); assert.doesNotMatch(r.stdout + r.stderr, /should-not-leak|OPENAI|VULTR/);
 });
-test('/etc/shadow and ssh keys are not readable', async () => { const r = await execute({ ...demo('shadow') }); assert.ok(trig(r).includes('secrets')); assert.doesNotMatch(r.stdout, /root:/); });
+// Image /etc/passwd is mode 0644 and contains "root:x:...:/root:". That file is not a host secret.
+// Shadow and private keys must be unreadable, and no password hash or key body may appear.
+test('/etc/shadow and ssh keys are not readable', async () => {
+  const r = await execute({ ...demo('shadow') });
+  assert.ok(trig(r).includes('secrets'));
+  assert.match(r.stdout, /\/etc\/shadow -> (PermissionError|FileNotFoundError)/);
+  assert.match(r.stdout, /\/root\/\.ssh\/id_rsa -> (PermissionError|FileNotFoundError)/);
+  assert.doesNotMatch(r.stdout, /\$[1567]\$|\$y\$|BEGIN (?:OPENSSH |RSA |EC )?PRIVATE KEY/);
+});
 test('memory bomb hits the memory cap', async () => { const r = await execute({ ...demo('mem') }); assert.ok(trig(r).includes('memory'), r.stderr.slice(-300)); assert.doesNotMatch(r.stdout, /allocated 4096 MB/); });
 test('policy scan flags every escape demo', () => { for (const d of DEMOS) assert.notEqual(scan(d.code).findings.length, 0, d.id); assert.equal(scan('print(1+1)').risk, 'low'); });

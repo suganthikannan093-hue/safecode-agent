@@ -12,7 +12,13 @@ Artifact collection occurs after the sandbox process ends and Docker removal is 
 
 ## Evidence model
 
-A controller timeout observation differs from an error-string classification. Strings can be spoofed, omitted or truncated. The `contained` field is retained for compatibility and means “one or more containment signals recorded”, not proven containment. Static scans are advisory. The `verified` field is also retained for compatibility and contains parsed program-reported values, not independently verified answers.
+A controller observation differs from an error-string classification. The controller records its own wall-clock timeout, a cgroup `pids.events` hit, and a runtime OOM kill (`OOMKilled` or `memory.events`) sampled before the container is removed. Strings can be spoofed, omitted or truncated. A printed `MemoryError` without that telemetry stays an inference. The `contained` field is retained for compatibility and means “one or more containment signals recorded”, not proven containment. Static scans are advisory. The `verified` field is also retained for compatibility and contains parsed program-reported values, not independently verified answers.
+
+The pinned shell image's `rm` is BusyBox and rejects `--no-preserve-root`, so that flag never exercises the read-only root. The preset deletes without that flag and touches `/var/tmp`, which is on the read-only root and returns "Read-only file system". `--network none` can leave a hostname lookup blocked until the wall-clock timeout; the network preset connects to a numeric address so the denial is `Errno 101` inside the limit. That denial is still inferred from program output.
+
+The image's own `/etc/passwd` is mode 0644, ships with the image, and contains account names without password hashes. It is not a mounted host secret. `/etc/shadow` and `/root/.ssh` are not readable by uid 65534. A denial does not prove the host's copies were absent; the image may contain its own files that the sandbox user cannot read.
+
+Customer files are mounted read-only. On gVisor's 9p read-only mount the kernel reports `ST_RDONLY` and a write fails with `EACCES` (errno 13). `EROFS` (errno 30) is also a denial. File mode 0444 can produce `EACCES` on a writable mount, so the read-only flag is the mount proof. None of these observations prove that an escape did not occur.
 
 The JSON receipt is signed over recursively key-sorted compact JSON (array order unchanged), excluding its signature object. Ed25519 verification uses a separately trusted SPKI public key; keyId is SHA-256 of SPKI DER. HTML is not independently signed. Key rotation requires retaining old public keys for old receipts. Losing a private key does not invalidate existing signatures; compromising it undermines attribution for that key. Hashes alone offer consistency checking, not issuer authentication.
 

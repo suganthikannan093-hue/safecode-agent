@@ -67,10 +67,14 @@ try {
     check(r.healed && r.attempts >= 2, 'Healing unavailable or unsuccessful; check output-sharing setting and inference');
     const ids = r.receiptRecord.selfHeal.timeline.map(t => t.sandboxId); check(new Set(ids).size === ids.length, 'Sandbox reused'); return { runId: r.receiptRecord.runId, attempts: r.attempts };
   });
+  const presetControl = { rmrf: ['readonly-fs', 'caps', 'non-root'], fork: ['pids'], loop: ['timeout'], exfil: ['network'], shadow: ['secrets'], mem: ['memory'] };
   for (const demo of status.demos) await scenario(`control preset: ${demo.id}`, async () => {
     const d = await request('/api/generate', { task: demo.task }); const r = await run(d, { heal: false });
-    check(r.limits.some(l => l.triggered), 'No expected control signal; inspect receipt'); check(r.attempts === 1, 'Preset retried unexpectedly');
-    return { runId: r.receiptRecord.runId, evidence: r.receiptRecord.containment.events, limitation: 'Output-derived signals are not independent enforcement proof' };
+    const got = r.limits.filter(l => l.triggered).map(l => l.id);
+    const want = presetControl[demo.id];
+    check(want ? want.some(id => got.includes(id)) : got.length > 0, `Expected ${want ? want.join('|') : 'a control'}; got ${got.join(',') || 'none'}`);
+    check(r.attempts === 1, 'Preset retried unexpectedly');
+    return { runId: r.receiptRecord.runId, evidence: r.receiptRecord.containment.events, limitation: 'Controller-observed events are runtime telemetry. Output-derived signals are not independent enforcement proof.' };
   });
   await scenario('spoofed error remains labelled as inference', async () => {
     const d = await request('/api/generate', { task: 'Print a diagnostic' }); const r = await run(d, { code: 'print("MemoryError")', language: 'python', heal: false });

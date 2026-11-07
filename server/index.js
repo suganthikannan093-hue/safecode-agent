@@ -118,8 +118,8 @@ export const server = createServer(async (req, res) => {
       capacity(drafts);
       const id = randomUUID(); const policy = scan(g.code);
       drafts.set(id, { createdAt: Date.now(), task, ...g, policy, fileId: up ? fileId : null, file });
-      log('generate', { id, task: task.slice(0, 200), provider: g.provider.name, model: g.provider.model, language: g.language, risk: policy.risk });
-      return json(res, 200, { id, language: g.language, code: g.code, explanation: g.explanation, policy, provider: g.provider.label, model: g.provider.model });
+      log('generate', { id, task: task.slice(0, 200), provider: g.provider.name, model: g.provider.model, inference: g.inference ?? null, language: g.language, risk: policy.risk });
+      return json(res, 200, { id, language: g.language, code: g.code, explanation: g.explanation, policy, provider: g.provider.label, model: g.provider.model, inference: g.inference ?? null });
     }
     if (url.pathname === '/api/run' && req.method === 'POST') {
       const { id: draftId, code, language, heal = true } = await body(req);
@@ -137,7 +137,7 @@ export const server = createServer(async (req, res) => {
       const send = o => res.write(JSON.stringify(o) + '\n');
       send({ type: 'start', id, draftId, mode: detectMode(), policy, heal });
       const up = d.fileId ? uploads.get(d.fileId) : null; const inputs = up ? [{ name: up.name, data: up.data }] : [];
-      const run = await runWithHealing({ task: d.task, code: final, language: lang, model: { provider: d.provider?.name || null, model: d.provider?.model || null }, inputs, file: d.file, heal: heal !== false && d.provider?.model !== 'escape-preset',
+      const run = await runWithHealing({ task: d.task, code: final, language: lang, model: { provider: d.provider?.name || null, model: d.provider?.model || null, inference: d.inference ?? null }, inputs, file: d.file, heal: heal !== false && d.provider?.model !== 'escape-preset',
         execute: args => { if (signal.aborted) throw error(409, 'Execution cancelled'); budgets.consume('attempt'); return execute({ ...args, signal }); }, fix: args => signal.aborted ? null : fix(args), onEvent: send, log: (ev, x) => log(ev, { id, ...x }) });
       const r = run.final.result; const finalCode = run.final.code;
       const explanation = r.cancelled || signal.aborted ? 'Execution cancelled; no model explanation requested.' : await explain(d.task, finalCode, r);

@@ -27,7 +27,7 @@ export async function runWithHealing({ task, code, language, model = null, input
     catch (e) { log('heal.error', { attempt: n, message: e.message }); onEvent({ type: 'heal.error', n, error: e.message }); }
     if (!f || !f.code || f.code === cur.code) { log('heal.gaveup', { attempt: n }); break; }
     log('heal.fix', { attempt: n + 1, model: f.provider?.model, codeSha256: sha256(f.code) });
-    cur = { code: f.code, language: f.language || cur.language, explanation: f.explanation, model: f.provider ? { provider: f.provider.name || null, model: f.provider.model || null } : null, by: `self-heal (${f.provider?.model || 'model'})` };
+    cur = { code: f.code, language: f.language || cur.language, explanation: f.explanation, model: f.provider ? { provider: f.provider.name || null, model: f.provider.model || null, inference: f.inference ?? null } : null, by: `self-heal (${f.provider?.model || 'model'})` };
   }
   const last = attempts.at(-1);
   return { attempts, final: last, healed: attempts.length > 1 && last.result.exitCode === 0 && !last.result.contained && !last.result.cancelled };

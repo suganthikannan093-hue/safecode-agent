@@ -11,6 +11,7 @@ async function request(path, data, method) {
   const r = await fetch(base + path, { headers: { ...headers, 'content-type': 'application/json' }, method: method || (data === undefined ? 'GET' : 'POST'), body: data === undefined ? undefined : JSON.stringify(data) });
   if (!r.ok) throw new Error(`${path}: HTTP ${r.status} ${await r.text()}`); return r.json();
 }
+const live = x => x?.source === 'live-inference' && typeof x.responseId === 'string' && x.responseId.length > 0 && x.finishReason === 'stop' && x.contentLength > 0;
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 async function scenario(name, fn) {
   try { const evidence = await fn(); results.push({ name, status: 'passed', evidence }); console.log(`PASS ${name}`); }
@@ -46,6 +47,7 @@ try {
     const upload = await fetch(base + '/api/upload?name=sales.csv', { method: 'POST', headers, body: readFileSync(new URL('../docs/demo-sales.csv', import.meta.url)) });
     check(upload.ok, 'Upload failed'); const file = await upload.json();
     draft = await request('/api/generate', { task: 'Sum revenue by region. Use csv.DictReader. Print RESULTS_JSON with a totals object. Draw an SVG chart in /work/out/chart.svg.', fileId: file.fileId });
+    if (process.argv.includes('--competition')) check(live(draft.inference), 'CSV lacks completed live inference provenance');
     csvRun = await run(draft, { heal: false }); check(csvRun.exitCode === 0, csvRun.stderr);
     const totals = csvRun.verified?.totals; check(totals?.north === 320 && totals?.south === 80 && totals?.east === 50, 'Result does not match independently specified fixture totals');
     check(csvRun.artifacts.length > 0, 'No chart returned'); return { runId: csvRun.receiptRecord.runId, expected: { north: 320, south: 80, east: 50 } };
@@ -65,6 +67,7 @@ try {
   await scenario('self-healing in a fresh sandbox', async () => {
     const d = await request('/api/generate', { task: status.healDemo.task }); const r = await run(d, { heal: true });
     check(r.healed && r.attempts >= 2, 'Healing unavailable or unsuccessful; check output-sharing setting and inference');
+    if (process.argv.includes('--competition')) check(r.receiptRecord.selfHeal.timeline.slice(1).some(t => t.model?.provider === 'vultr' && live(t.model?.inference)), 'Repair lacks completed live inference provenance');
     const ids = r.receiptRecord.selfHeal.timeline.map(t => t.sandboxId); check(new Set(ids).size === ids.length, 'Sandbox reused'); return { runId: r.receiptRecord.runId, attempts: r.attempts };
   });
   const presetControl = { rmrf: ['readonly-fs', 'caps', 'non-root'], fork: ['pids'], loop: ['timeout'], exfil: ['network'], shadow: ['secrets'], mem: ['memory'] };
